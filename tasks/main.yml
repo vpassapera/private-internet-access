@@ -1,0 +1,36 @@
+---
+# tasks file for roles/private-internet-access
+
+
+  - name: apt-get stuff
+    apt: name={{ item }} state=present update_cache=yes cache_valid_time=3600
+    with_items:
+      - openvpn
+      - unzip
+      - upstart
+
+  - name: wget vpn configs
+    get_url: url=https://www.privateinternetaccess.com/openvpn/openvpn.zip dest=/etc/openvpn
+
+  - name: extract vpn configs
+    unarchive: src=/etc/openvpn/openvpn.zip dest=/etc/openvpn copy=no
+
+  - name: deploy auth file
+    template: src=etc/openvpn/creds.txt dest=/etc/openvpn/creds.txt
+
+  - name: gather vpn configs
+    shell: ls /etc/openvpn/*ovpn
+    register: vpn_confs
+
+  - name: embed creds to all open vpn configs
+    lineinfile: line="auth-user-pass /etc/openvpn/creds.txt" regexp="auth-user-pass" dest="{{ item }}"
+    with_items:
+      - "{{ vpn_confs.stdout.splitlines() }}"
+
+  - name: deploy init file
+    template: src=etc/init/openvpn.conf dest=/etc/init/openvpn.conf
+
+  - name: verify the init file
+    sudo: no
+    changed_when: false
+    shell: init-checkconf -d /etc/init/openvpn.conf
